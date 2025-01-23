@@ -1,18 +1,17 @@
 "use client"
-import React, { Dispatch, SetStateAction, use, useState } from "react";
+import { motion } from "framer-motion";
+import { SessionProvider, useSession } from "next-auth/react";
+import { Dispatch, SetStateAction, useState } from "react";
 import { IconType } from "react-icons";
 import {
-  FiMail,
-  FiEdit,
-  FiSend,
-  FiCheckSquare,
   FiCalendar,
+  FiCheckSquare,
   FiChevronDown,
   FiChevronsRight,
+  FiEdit,
+  FiMail,
+  FiSend,
 } from "react-icons/fi";
-import { motion } from "framer-motion";
-import { useSession } from "next-auth/react"
-import { SessionProvider } from "next-auth/react";
 export const Sidebar = () => {
   const [open, setOpen] = useState(true);
   const [selected, setSelected] = useState("Dashboard");

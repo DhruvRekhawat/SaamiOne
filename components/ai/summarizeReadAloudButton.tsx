@@ -1,18 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { generateSummary } from '@/app/actions/generateSummary';
 import { Button } from '@/components/ui/button';
-import { 
-  Drawer, 
-  DrawerClose, 
-  DrawerContent, 
-  DrawerDescription, 
-  DrawerHeader, 
-  DrawerTitle, 
-  DrawerTrigger 
+import {
+    Drawer,
+    DrawerContent,
+    DrawerDescription,
+    DrawerHeader,
+    DrawerTitle
 } from '@/components/ui/drawer';
 import { Loader2, Volume2, VolumeX } from 'lucide-react';
-import { generateSummary } from '@/app/actions/generateSummary';
+import { useEffect, useState } from 'react';
 
 export function SummarizeReadAloudButton({ emailBody }: { emailBody: string }) {
   const [summary, setSummary] = useState('');
