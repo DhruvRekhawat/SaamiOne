@@ -76,3 +76,38 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+
+/* Tiptap Editor Styles */
+.tiptap {
+  > * + * {
+    margin-top: 0.75em;
+  }
+
+  ul, 
+  ol {
+    padding: 0 1rem;
+    list-style: disc;
+  }
+
+  ol {
+    list-style-type: decimal;
+  }
+
+  h1 {
+    font-size: 1.5em;
+    font-weight: bold;
+  }
+
+  h2 {
+    font-size: 1.25em;
+    font-weight: bold;
+  }
+
+  blockquote {
+    border-left: 4px solid #ccc;
+    padding-left: 1rem;
+    font-style: italic;
+    color: #666;
+  }
+}

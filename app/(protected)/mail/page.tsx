@@ -1,11 +1,23 @@
 import { auth } from "@/auth";
 import { SummarizeReadAloudButton } from "@/components/ai/summarizeReadAloudButton";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Session } from "next-auth";
+import { Search } from "lucide-react";
+import { redirect } from "next/navigation";
 
 // Type for email message
-interface EmailMessage {
+export interface EmailMessage {
   id: string;
   threadId: string;
   subject: string;
@@ -13,131 +25,176 @@ interface EmailMessage {
   date: string;
   snippet: string;
   isUnread: boolean;
-  body:string;
+  body: string;
+  avatarUrl: string;
 }
 
-function isSessionWithToken(
-  session: Session | null
-): session is Session & { accessToken: string } {
-  return session !== null && "accessToken" in session;
-}
-
-function decodeBase64(data: string) {
-  return Buffer.from(data, 'base64').toString('utf-8');
-}
+// function decodeBase64(data: string) {
+//   return Buffer.from(data, "base64").toString("utf-8");
+// }
 
 function getEmailBody(payload: any): string {
-  if (payload.body?.data) {
-    return decodeBase64(payload.body.data);
-  }
-  
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/plain' || part.mimeType === 'text/html') {
-        return decodeBase64(part.body.data);
-      }
-      if (part.parts) {
-        const body = getEmailBody(part);
-        if (body) return body;
+  // Helper function to decode base64 safely
+  const decodeBase64Safe = (data: string) => {
+    try {
+      return Buffer.from(data, "base64").toString("utf-8");
+    } catch (error) {
+      console.error("Base64 decoding error:", error);
+      return "";
+    }
+  };
+
+  // Recursive function to extract HTML or plain text body
+  const extractBody = (part: any): string => {
+    // Check if this part is a direct body
+    if (part.body?.data) {
+      // Prioritize HTML over plain text
+      if (part.mimeType === "text/html") {
+        return decodeBase64Safe(part.body.data);
+      } else if (part.mimeType === "text/plain") {
+        return `<pre>${decodeBase64Safe(part.body.data)}</pre>`;
       }
     }
-  }
-  
-  return '';
+
+    // If this is a multipart message, recursively search for HTML/text
+    if (part.parts) {
+      for (const subPart of part.parts) {
+        // Prioritize HTML
+        if (subPart.mimeType === "text/html") {
+          return decodeBase64Safe(subPart.body.data);
+        }
+      }
+
+      // If no HTML, look for plain text
+      for (const subPart of part.parts) {
+        if (subPart.mimeType === "text/plain") {
+          return `<pre>${decodeBase64Safe(subPart.body.data)}</pre>`;
+        }
+      }
+
+      // Recursively check nested parts
+      for (const subPart of part.parts) {
+        if (subPart.parts) {
+          const nestedBody = extractBody(subPart);
+          if (nestedBody) return nestedBody;
+        }
+      }
+    }
+
+    return "";
+  };
+
+  // Start extraction from the payload
+  return extractBody(payload) || "No body found";
 }
 
+async function fetchEmails(
+  accessToken: string | unknown,
+  searchQuery: string
+): Promise<EmailMessage[]> {
+  const messagesResponse = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
+      searchQuery
+    )}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  ).then((res) => res.json());
 
+  const emails = await Promise.all(
+    (messagesResponse.messages || []).map(async (msg: { id: string }) => {
+      const fullMessage = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      ).then((res) => res.json());
 
+      const headers = fullMessage.payload.headers;
+      const subject =
+        headers.find((h: any) => h.name === "Subject")?.value || "No Subject";
+      const from = headers.find((h: any) => h.name === "From")?.value || "";
+      const date = headers.find((h: any) => h.name === "Date")?.value || "";
 
-async function MailPage() {
+      const isUnread = fullMessage.labelIds?.includes("UNREAD") || false;
+
+      return {
+        id: fullMessage.id,
+        threadId: fullMessage.threadId,
+        subject,
+        from,
+        date,
+        snippet: fullMessage.snippet,
+        isUnread,
+        body: getEmailBody(fullMessage.payload),
+      };
+    })
+  );
+
+  return emails;
+}
+
+export default async function MailPage({
+  searchParams,
+}: {
+  searchParams: { q?: string };
+}) {
   const session = await auth();
 
-  if (!isSessionWithToken(session)) {
-    return <div>Please sign in to view emails</div>;
+  if (!session || !("accessToken" in session)) {
+    redirect("/login");
   }
 
-  try {
-    const messages = await fetch(
-      "https://gmail.googleapis.com/gmail/v1/users/me/messages",
-      {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          "Content-Type": "application/json",
-        },
-      }
-    ).then((res) => res.json());
-    const fullMessages: EmailMessage[] = await Promise.all(
-      messages.messages.map(async (msg: { id: string }) => {
-        const fullMessage = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-          {
-            headers: {
-              Authorization: `Bearer ${session.accessToken}`,
-              "Content-Type": "application/json",
-            },
-          }
-        ).then((res) => res.json());
+  const searchQuery = searchParams.q || "";
+  const emails = await fetchEmails(session.accessToken, searchQuery);
 
-        const headers = fullMessage.payload.headers;
-        const subject =
-          headers.find((h: any) => h.name === "Subject")?.value || "No Subject";
-        const from = headers.find((h: any) => h.name === "From")?.value || "";
-        const date = headers.find((h: any) => h.name === "Date")?.value || "";
-
-        // Check if message has UNREAD label
-        const isUnread = fullMessage.labelIds?.includes("UNREAD") || false;
-
-        return {
-          id: fullMessage.id,
-          threadId: fullMessage.threadId,
-          subject,
-          from,
-          date,
-          snippet: fullMessage.snippet,
-          isUnread,
-          body: getEmailBody(fullMessage.payload),
-        };
-      })
-    );
-
-
-
-    return (
-      <div className="p-4">
-        <h1 className="text-2xl font-bold mb-4">Your Emails</h1>
-        <Tabs defaultValue="unread" className="w-full">
-          <TabsList>
-            <TabsTrigger value="unread">Unread</TabsTrigger>
-            <TabsTrigger value="read">Read</TabsTrigger>
-          </TabsList>
-          <TabsContent value="unread">
-            {" "}
-            <div className="space-y-4">
-              {fullMessages.map((email) => (
-                <Card
-                  key={email.id}
-                  className={`border p-4 rounded-lg ${
-                    email.isUnread ? "" : "hidden"
-                  }`}
-                >
-                  <h2 className="font-semibold">{email.subject}</h2>
-                  <p className="text-sm text-gray-600">{email.from}</p>
-                  <p className="text-sm text-gray-500">{email.date}</p>
-                  <p className="my-2">{email.snippet}</p>
-                  <SummarizeReadAloudButton emailBody={email.body}></SummarizeReadAloudButton>
-                </Card>
+  return (
+    <div className="p-4">
+      <h1 className="text-2xl font-bold mb-4">Your Emails</h1>
+      <form
+        method="GET"
+        action="/mail"
+        className="mb-4 flex justify-start items-center"
+      >
+        <input
+          type="text"
+          name="q"
+          defaultValue={searchQuery}
+          placeholder="Search emails..."
+          className="w-full p-2 border rounded-lg max-w-[600px]"
+        />
+        <Button type="submit" variant={"secondary"} className="p-2 rounded-lg ">
+          <Search></Search>
+        </Button>
+      </form>
+      <Tabs defaultValue="unread" className="w-full">
+        <TabsList>
+          <TabsTrigger value="unread">Unread</TabsTrigger>
+          <TabsTrigger value="read">Read</TabsTrigger>
+        </TabsList>
+        <TabsContent value="unread">
+          <div className="space-y-4">
+            {emails
+              .filter((email) => email.isUnread)
+              .map((email) => (
+                <EmailCard key={email.id} email={email} />
               ))}
-            </div>
-          </TabsContent>
-          <TabsContent value="read">
-            {" "}
-            <div className="space-y-4">
-              {fullMessages.map((email) => (
+          </div>
+        </TabsContent>
+        <TabsContent value="read">
+          <div className="space-y-4">
+            {emails
+              .filter((email) => !email.isUnread)
+              .map((email) => (
                 <Card
                   key={email.id}
-                  className={`border p-4 rounded-lg bg-zinc-100 ${
-                    email.isUnread ? "hidden" : ""
-                  }`}
+                  className="border p-4 rounded-lg bg-zinc-100"
                 >
                   <h2 className="font-semibold">{email.subject}</h2>
                   <p className="text-sm text-gray-600">{email.from}</p>
@@ -145,15 +202,46 @@ async function MailPage() {
                   <p className="mt-2">{email.snippet}</p>
                 </Card>
               ))}
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-    );
-  } catch (error) {
-    console.error("Error fetching emails:", error);
-    return <div>Error loading emails</div>;
-  }
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 }
 
-export default MailPage;
+function EmailCard({ email }: { email: EmailMessage }) {
+  return (
+    <Card className="border p-4 rounded-lg flex items-center space-x-4">
+      <Sheet>
+        <div>
+          <SheetTrigger className="text-start">
+            <h2 className="font-semibold">{email.subject}</h2>
+          </SheetTrigger>
+          <p className="text-sm text-gray-600">{email.from}</p>
+          <p className="text-sm text-gray-500">{email.date}</p>
+          <p className="my-2">{email.snippet}</p>
+          <SummarizeReadAloudButton emailBody={email.body} />
+        </div>
+        <SheetContent style={{ maxWidth: "90vw" }}>
+          <SheetHeader>
+            <SheetTitle>{email.subject}</SheetTitle>
+            <SheetDescription>
+              <p className="text-sm text-gray-600">{email.from}</p>
+              <p className="text-sm text-gray-500">{email.date}</p>
+            </SheetDescription>
+          </SheetHeader>
+
+          <ScrollArea className="h-[66vh] w-full ">
+            <div
+              className="prose max-w-none"
+              dangerouslySetInnerHTML={{ __html: email.body }}
+            />
+          </ScrollArea>
+        </SheetContent>
+        <SheetFooter>
+
+        </SheetFooter>
+      </Sheet>
+    </Card>
+  );
+}

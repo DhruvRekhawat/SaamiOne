@@ -3,13 +3,13 @@
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 
-export async function generateSummary(formData: FormData) {
+export async function generateReply(formData: FormData) {
   const emailBody = formData.get('emailBody') as string;
 
   try {
     const { text } = await generateText({
       model: openai('gpt-4o'),
-      prompt: `Summarize the following email body in 10 words. Capture the main points, key information, and overall purpose of the email:
+      prompt: `Generate a reply for the following email, keep it concise and professional:
 
 ${emailBody}
 
