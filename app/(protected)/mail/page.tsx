@@ -94,41 +94,57 @@ async function fetchEmails(
     }
   ).then((res) => res.json());
 
+  if (!messagesResponse.messages || !Array.isArray(messagesResponse.messages)) {
+    console.error("No messages found or invalid response:", messagesResponse);
+    return [];
+  }
+
   const emails = await Promise.all(
-    (messagesResponse.messages || []).map(async (msg: { id: string }) => {
-      const fullMessage = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+    messagesResponse.messages.map(async (msg: { id: string }) => {
+      try {
+        const fullMessage = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          }
+        ).then((res) => res.json());
+
+        if (!fullMessage || !fullMessage.payload || !fullMessage.payload.headers) {
+          console.error("Invalid message structure:", fullMessage);
+          return null; // Skip this email if it's invalid
         }
-      ).then((res) => res.json());
 
-      const headers = fullMessage.payload.headers;
-      const subject =
-        headers.find((h: any) => h.name === "Subject")?.value || "No Subject";
-      const from = headers.find((h: any) => h.name === "From")?.value || "";
-      const date = headers.find((h: any) => h.name === "Date")?.value || "";
+        const headers = fullMessage.payload.headers;
+        const subject =
+          headers.find((h: any) => h.name === "Subject")?.value || "No Subject";
+        const from = headers.find((h: any) => h.name === "From")?.value || "";
+        const date = headers.find((h: any) => h.name === "Date")?.value || "";
+        const isUnread = fullMessage.labelIds?.includes("UNREAD") || false;
 
-      const isUnread = fullMessage.labelIds?.includes("UNREAD") || false;
-
-      return {
-        id: fullMessage.id,
-        threadId: fullMessage.threadId,
-        subject,
-        from,
-        date,
-        snippet: fullMessage.snippet,
-        isUnread,
-        body: getEmailBody(fullMessage.payload),
-      };
+        return {
+          id: fullMessage.id,
+          threadId: fullMessage.threadId,
+          subject,
+          from,
+          date,
+          snippet: fullMessage.snippet,
+          isUnread,
+          body: getEmailBody(fullMessage.payload),
+        };
+      } catch (error) {
+        console.error("Error fetching or processing message:", msg.id, error);
+        return null; // Skip this email if there's an error
+      }
     })
   );
 
-  return emails;
+  // Filter out any null values from failed fetches
+  return emails.filter((email) => email !== null) as EmailMessage[];
 }
+
 
 export default async function MailPage({
   searchParams,
