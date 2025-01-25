@@ -1,17 +1,7 @@
 import { auth } from "@/auth";
-import { SummarizeReadAloudButton } from "@/components/ai/summarizeReadAloudButton";
+import EmailCard from "@/components/email/email-card";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -209,39 +199,4 @@ export default async function MailPage({
   );
 }
 
-function EmailCard({ email }: { email: EmailMessage }) {
-  return (
-    <Card className="border p-4 rounded-lg flex items-center space-x-4">
-      <Sheet>
-        <div>
-          <SheetTrigger className="text-start">
-            <h2 className="font-semibold">{email.subject}</h2>
-          </SheetTrigger>
-          <p className="text-sm text-gray-600">{email.from}</p>
-          <p className="text-sm text-gray-500">{email.date}</p>
-          <p className="my-2">{email.snippet}</p>
-          <SummarizeReadAloudButton emailBody={email.body} />
-        </div>
-        <SheetContent style={{ maxWidth: "90vw" }}>
-          <SheetHeader>
-            <SheetTitle>{email.subject}</SheetTitle>
-            <SheetDescription>
-              <p className="text-sm text-gray-600">{email.from}</p>
-              <p className="text-sm text-gray-500">{email.date}</p>
-            </SheetDescription>
-          </SheetHeader>
 
-          <ScrollArea className="h-[66vh] w-full ">
-            <div
-              className="prose max-w-none"
-              dangerouslySetInnerHTML={{ __html: email.body }}
-            />
-          </ScrollArea>
-        </SheetContent>
-        <SheetFooter>
-
-        </SheetFooter>
-      </Sheet>
-    </Card>
-  );
-}

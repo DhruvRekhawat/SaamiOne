@@ -61,11 +61,12 @@ export function SummarizeReadAloudButton({ emailBody }: { emailBody: string }) {
       <Button 
         onClick={handleGenerateSummary} 
         disabled={isGenerating}
+        variant={"secondary"}
       >
         {isGenerating ? (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         ) : null}
-        Generate Summary
+        Summarize
       </Button>
 
       {summary && (
